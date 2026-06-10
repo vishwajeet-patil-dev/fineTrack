@@ -1,0 +1,1691 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>FinTrack</title>
+
+    <!-- iOS PWA: add to Home Screen behaves like a native app -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="FinTrack" />
+    <meta name="theme-color" content="#F2F2F7" />
+    <link
+      rel="apple-touch-icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230A9D58'/%3E%3Ctext x='90' y='124' font-size='100' text-anchor='middle' fill='white' font-family='-apple-system,system-ui' font-weight='700'%3E%E2%82%B9%3C/text%3E%3C/svg%3E"
+    />
+
+    <!-- jsQR: iOS Safari has no BarcodeDetector, so we decode QR frames in JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+
+    <style>
+      :root {
+        --bg: #f2f2f7;
+        --card: #ffffff;
+        --sep: #e5e5ea;
+        --label: #1c1c1e;
+        --label2: #8e8e93;
+        --label3: #c7c7cc;
+        --green: #0a9d58;
+        --green-soft: #e7f6ee;
+        --blue: #007aff;
+        --red: #ff3b30;
+        --orange: #ff9500;
+        --radius: 14px;
+        --tabbar-h: calc(50px + env(safe-area-inset-bottom));
+        --header-h: calc(52px + env(safe-area-inset-top));
+      }
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui,
+          sans-serif;
+        background: var(--bg);
+        color: var(--label);
+        -webkit-font-smoothing: antialiased;
+        overscroll-behavior-y: none;
+      }
+      button {
+        font-family: inherit;
+        cursor: pointer;
+        border: none;
+        background: none;
+      }
+      input {
+        font-family: inherit;
+        font-size: 17px;
+      }
+
+      /* ---------- App shell ---------- */
+      #app {
+        height: 100dvh;
+        display: flex;
+        flex-direction: column;
+      }
+      .screen {
+        flex: 1;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        display: none;
+        padding-bottom: calc(var(--tabbar-h) + 16px);
+      }
+      .screen.active {
+        display: block;
+      }
+
+      .lg-header {
+        padding: calc(env(safe-area-inset-top) + 8px) 20px 4px;
+        background: var(--bg);
+      }
+      .lg-header h1 {
+        font-size: 34px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        margin: 0;
+      }
+      .lg-header .sub {
+        color: var(--label2);
+        font-size: 15px;
+        margin-top: 2px;
+      }
+
+      .card {
+        background: var(--card);
+        border-radius: var(--radius);
+        margin: 12px 16px;
+        overflow: hidden;
+      }
+      .card-pad {
+        padding: 16px;
+      }
+      .section-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--label2);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin: 22px 20px 6px;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        padding: 13px 16px;
+        border-bottom: 0.5px solid var(--sep);
+        gap: 12px;
+      }
+      .row:last-child {
+        border-bottom: none;
+      }
+      .row .icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        display: grid;
+        place-items: center;
+        font-size: 17px;
+        flex-shrink: 0;
+        color: #fff;
+      }
+      .row .meta {
+        flex: 1;
+        min-width: 0;
+      }
+      .row .meta .t {
+        font-size: 16px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .row .meta .s {
+        font-size: 13px;
+        color: var(--label2);
+        margin-top: 1px;
+      }
+      .row .amt {
+        font-size: 16px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      /* ---------- Tab bar ---------- */
+      #tabbar {
+        height: var(--tabbar-h);
+        flex-shrink: 0;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-around;
+        padding-top: 6px;
+        padding-bottom: env(safe-area-inset-bottom);
+        background: rgba(249, 249, 249, 0.92);
+        backdrop-filter: saturate(180%) blur(20px);
+        -webkit-backdrop-filter: saturate(180%) blur(20px);
+        border-top: 0.5px solid var(--sep);
+      }
+      .tab {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        color: var(--label2);
+        font-size: 10px;
+        font-weight: 500;
+        flex: 1;
+        padding-top: 2px;
+      }
+      .tab svg {
+        width: 26px;
+        height: 26px;
+      }
+      .tab.active {
+        color: var(--green);
+      }
+      .tab.scan-tab .scan-btn {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: var(--green);
+        display: grid;
+        place-items: center;
+        margin-top: -18px;
+        box-shadow: 0 4px 12px rgba(10, 157, 88, 0.4);
+      }
+      .tab.scan-tab .scan-btn svg {
+        width: 28px;
+        height: 28px;
+        color: #fff;
+      }
+      .tab.scan-tab span {
+        margin-top: -2px;
+      }
+
+      /* ---------- Buttons ---------- */
+      .btn {
+        display: block;
+        width: 100%;
+        padding: 15px;
+        border-radius: 13px;
+        font-size: 17px;
+        font-weight: 600;
+        text-align: center;
+      }
+      .btn-primary {
+        background: var(--green);
+        color: #fff;
+      }
+      .btn-primary:active {
+        background: #08824a;
+      }
+      .btn-ghost {
+        background: transparent;
+        color: var(--green);
+      }
+      .btn-danger {
+        background: transparent;
+        color: var(--red);
+      }
+
+      /* ---------- Auth ---------- */
+      #auth {
+        position: absolute;
+        inset: 0;
+        background: var(--bg);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0 28px;
+        z-index: 50;
+      }
+      #auth .logo {
+        width: 78px;
+        height: 78px;
+        border-radius: 20px;
+        background: var(--green);
+        display: grid;
+        place-items: center;
+        font-size: 44px;
+        color: #fff;
+        font-weight: 700;
+        margin: 0 auto 18px;
+        box-shadow: 0 8px 24px rgba(10, 157, 88, 0.35);
+      }
+      #auth h2 {
+        text-align: center;
+        font-size: 26px;
+        font-weight: 800;
+        margin: 0 0 4px;
+      }
+      #auth p.tag {
+        text-align: center;
+        color: var(--label2);
+        margin: 0 0 30px;
+        font-size: 15px;
+      }
+      .field {
+        background: var(--card);
+        border-radius: 12px;
+        margin-bottom: 12px;
+        padding: 14px 16px;
+      }
+      .field input {
+        border: none;
+        outline: none;
+        width: 100%;
+        background: transparent;
+      }
+      .auth-switch {
+        text-align: center;
+        margin-top: 18px;
+        color: var(--label2);
+        font-size: 15px;
+      }
+      .auth-switch b {
+        color: var(--green);
+      }
+      .err {
+        color: var(--red);
+        font-size: 14px;
+        text-align: center;
+        min-height: 18px;
+        margin-top: 8px;
+      }
+
+      /* ---------- Stat / dashboard ---------- */
+      .hero {
+        margin: 8px 16px 4px;
+        background: linear-gradient(135deg, #0a9d58, #0bbf6c);
+        border-radius: 18px;
+        padding: 20px;
+        color: #fff;
+      }
+      .hero .lbl {
+        font-size: 14px;
+        opacity: 0.9;
+      }
+      .hero .big {
+        font-size: 40px;
+        font-weight: 800;
+        letter-spacing: -1px;
+        margin: 4px 0 2px;
+      }
+      .hero .note {
+        font-size: 13px;
+        opacity: 0.85;
+      }
+
+      .barrow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 16px;
+      }
+      .barrow .name {
+        width: 96px;
+        font-size: 14px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .barrow .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 3px;
+        flex-shrink: 0;
+      }
+      .bartrack {
+        flex: 1;
+        height: 8px;
+        background: var(--sep);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .barfill {
+        height: 100%;
+        border-radius: 4px;
+      }
+      .barrow .val {
+        width: 70px;
+        text-align: right;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--label);
+      }
+
+      /* ---------- Scanner ---------- */
+      #scanWrap {
+        position: relative;
+        height: 100%;
+        background: #000;
+        display: none;
+      }
+      #scanWrap.active {
+        display: block;
+      }
+      #scanWrap video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .scan-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+      .scan-frame {
+        width: 240px;
+        height: 240px;
+        border-radius: 24px;
+        box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+        position: relative;
+      }
+      .scan-frame::before,
+      .scan-frame::after,
+      .c3,
+      .c4 {
+        content: "";
+        position: absolute;
+        width: 30px;
+        height: 30px;
+        border: 3px solid #fff;
+      }
+      .scan-frame::before {
+        top: -2px;
+        left: -2px;
+        border-right: none;
+        border-bottom: none;
+        border-radius: 24px 0 0 0;
+      }
+      .scan-frame::after {
+        top: -2px;
+        right: -2px;
+        border-left: none;
+        border-bottom: none;
+        border-radius: 0 24px 0 0;
+      }
+      .scan-frame .c3 {
+        bottom: -2px;
+        left: -2px;
+        border-right: none;
+        border-top: none;
+        border-radius: 0 0 0 24px;
+      }
+      .scan-frame .c4 {
+        bottom: -2px;
+        right: -2px;
+        border-left: none;
+        border-top: none;
+        border-radius: 0 0 24px 0;
+      }
+      .scan-hint {
+        color: #fff;
+        margin-top: 28px;
+        font-size: 15px;
+        font-weight: 500;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+      }
+      .scan-top {
+        position: absolute;
+        top: calc(env(safe-area-inset-top) + 12px);
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: space-between;
+        padding: 0 16px;
+        pointer-events: auto;
+        z-index: 5;
+      }
+      .scan-top button {
+        color: #fff;
+        font-size: 17px;
+        font-weight: 500;
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 20px;
+        padding: 7px 16px;
+      }
+      .scan-err {
+        position: absolute;
+        inset: 0;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 30px;
+        text-align: center;
+        color: #fff;
+      }
+
+      /* ---------- Sheet (modal) ---------- */
+      #sheetBg {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        display: none;
+        align-items: flex-end;
+        z-index: 100;
+      }
+      #sheetBg.active {
+        display: flex;
+      }
+      #sheet {
+        background: var(--bg);
+        width: 100%;
+        border-radius: 18px 18px 0 0;
+        padding: 8px 0 calc(env(safe-area-inset-bottom) + 16px);
+        max-height: 90dvh;
+        overflow-y: auto;
+        transform: translateY(0);
+      }
+      .grabber {
+        width: 38px;
+        height: 5px;
+        background: var(--label3);
+        border-radius: 3px;
+        margin: 8px auto 6px;
+      }
+      .sheet-title {
+        text-align: center;
+        font-size: 18px;
+        font-weight: 700;
+        margin: 6px 0 14px;
+      }
+      .input-card {
+        background: var(--card);
+        border-radius: 12px;
+        margin: 0 16px 12px;
+      }
+      .input-line {
+        display: flex;
+        align-items: center;
+        padding: 13px 16px;
+        border-bottom: 0.5px solid var(--sep);
+      }
+      .input-line:last-child {
+        border-bottom: none;
+      }
+      .input-line label {
+        width: 96px;
+        color: var(--label2);
+        font-size: 15px;
+      }
+      .input-line input {
+        flex: 1;
+        border: none;
+        outline: none;
+        text-align: right;
+        background: transparent;
+      }
+      .cat-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 4px 16px 8px;
+      }
+      .cat-chip {
+        padding: 9px 14px;
+        border-radius: 20px;
+        background: var(--card);
+        font-size: 14px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border: 1.5px solid transparent;
+      }
+      .cat-chip.sel {
+        border-color: var(--green);
+        background: var(--green-soft);
+        color: var(--green);
+        font-weight: 600;
+      }
+      .sheet-actions {
+        padding: 6px 16px 0;
+      }
+
+      /* ---------- search / filter ---------- */
+      .searchbar {
+        margin: 6px 16px 4px;
+        background: #e3e3e8;
+        border-radius: 10px;
+        padding: 9px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .searchbar input {
+        flex: 1;
+        border: none;
+        outline: none;
+        background: transparent;
+        font-size: 16px;
+      }
+      .filterscroll {
+        display: flex;
+        gap: 8px;
+        padding: 8px 16px;
+        overflow-x: auto;
+      }
+      .filterscroll::-webkit-scrollbar {
+        display: none;
+      }
+      .fchip {
+        flex-shrink: 0;
+        padding: 7px 14px;
+        border-radius: 18px;
+        background: var(--card);
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--label);
+        white-space: nowrap;
+      }
+      .fchip.sel {
+        background: var(--green);
+        color: #fff;
+      }
+
+      .empty {
+        text-align: center;
+        color: var(--label2);
+        padding: 50px 30px;
+      }
+      .empty .em {
+        font-size: 46px;
+      }
+      .empty p {
+        font-size: 15px;
+        margin-top: 10px;
+        line-height: 1.4;
+      }
+
+      .profile-head {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 18px 0 6px;
+      }
+      .avatar {
+        width: 74px;
+        height: 74px;
+        border-radius: 50%;
+        background: var(--green);
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 30px;
+        font-weight: 700;
+      }
+      .profile-head .nm {
+        font-size: 21px;
+        font-weight: 700;
+        margin-top: 10px;
+      }
+      .profile-head .em {
+        color: var(--label2);
+        font-size: 15px;
+      }
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ================= AUTH ================= -->
+    <div id="auth">
+      <div class="logo">₹</div>
+      <h2>FinTrack</h2>
+      <p class="tag">Intelligent finance tracking</p>
+
+      <div id="nameField" class="field hidden">
+        <input id="f_name" placeholder="Full name" autocomplete="name" />
+      </div>
+      <div class="field">
+        <input
+          id="f_email"
+          type="email"
+          placeholder="Email"
+          autocomplete="email"
+          autocapitalize="off"
+        />
+      </div>
+      <div class="field">
+        <input
+          id="f_pass"
+          type="password"
+          placeholder="Password"
+          autocomplete="current-password"
+        />
+      </div>
+
+      <div class="err" id="authErr"></div>
+      <button class="btn btn-primary" id="authBtn" style="margin-top: 8px">
+        Log In
+      </button>
+      <div class="auth-switch">
+        <span id="switchText">New here?</span>
+        <b id="switchBtn">Create account</b>
+      </div>
+    </div>
+
+    <!-- ================= APP ================= -->
+    <div id="app" class="hidden">
+      <!-- HOME -->
+      <div class="screen active" id="screen-home">
+        <div class="lg-header">
+          <h1>Home</h1>
+          <div class="sub" id="homeGreeting"></div>
+        </div>
+        <div class="hero">
+          <div class="lbl">Spent this month</div>
+          <div class="big" id="heroAmount">₹0</div>
+          <div class="note" id="heroCount">No transactions yet</div>
+        </div>
+        <div class="section-title">By category</div>
+        <div class="card" id="homeBars"></div>
+        <div class="section-title">Recent</div>
+        <div class="card" id="homeRecent"></div>
+      </div>
+
+      <!-- HISTORY -->
+      <div class="screen" id="screen-history">
+        <div class="lg-header"><h1>History</h1></div>
+        <div class="searchbar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="7" stroke="#8E8E93" stroke-width="2" />
+            <path
+              d="M20 20l-3-3"
+              stroke="#8E8E93"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+          <input
+            id="searchInput"
+            placeholder="Search merchant"
+            autocapitalize="off"
+          />
+        </div>
+        <div class="filterscroll" id="filterChips"></div>
+        <div class="card" id="historyList"></div>
+      </div>
+
+      <!-- REPORTS -->
+      <div class="screen" id="screen-reports">
+        <div class="lg-header">
+          <h1>Reports</h1>
+          <div class="sub">This month's breakdown</div>
+        </div>
+        <div class="card card-pad" style="text-align: center">
+          <canvas
+            id="donut"
+            width="220"
+            height="220"
+            style="max-width: 220px; margin: 0 auto; display: block"
+          ></canvas>
+          <div
+            id="donutTotal"
+            style="font-size: 13px; color: var(--label2); margin-top: 6px"
+          ></div>
+        </div>
+        <div class="section-title">Category totals</div>
+        <div class="card" id="reportList"></div>
+        <div class="section-title">Insight</div>
+        <div
+          class="card card-pad"
+          id="insightCard"
+          style="font-size: 15px; line-height: 1.45; color: var(--label)"
+        ></div>
+      </div>
+
+      <!-- PROFILE -->
+      <div class="screen" id="screen-profile">
+        <div class="lg-header"><h1>Profile</h1></div>
+        <div class="profile-head">
+          <div class="avatar" id="pAvatar">U</div>
+          <div class="nm" id="pName">User</div>
+          <div class="em" id="pEmail"></div>
+        </div>
+        <div class="section-title">Account</div>
+        <div class="card">
+          <div class="row">
+            <div class="icon" style="background: var(--green)">📊</div>
+            <div class="meta"><div class="t">Total transactions</div></div>
+            <div class="amt" id="pTxCount">0</div>
+          </div>
+          <div class="row">
+            <div class="icon" style="background: var(--blue)">💰</div>
+            <div class="meta"><div class="t">All-time spend</div></div>
+            <div class="amt" id="pTotal">₹0</div>
+          </div>
+        </div>
+        <div class="section-title">Data</div>
+        <div class="card">
+          <button
+            class="row"
+            style="width: 100%; text-align: left"
+            id="manualAddBtn"
+          >
+            <div class="icon" style="background: var(--orange)">＋</div>
+            <div class="meta">
+              <div class="t">Add transaction manually</div>
+            </div>
+          </button>
+          <button
+            class="row"
+            style="width: 100%; text-align: left"
+            id="clearBtn"
+          >
+            <div class="icon" style="background: var(--red)">🗑</div>
+            <div class="meta">
+              <div class="t" style="color: var(--red)">
+                Clear all transactions
+              </div>
+            </div>
+          </button>
+        </div>
+        <div style="padding: 8px 16px; margin-top: 8px">
+          <button class="btn btn-danger" id="logoutBtn">Log Out</button>
+        </div>
+        <div
+          style="
+            text-align: center;
+            color: var(--label3);
+            font-size: 12px;
+            padding: 10px;
+          "
+        >
+          FinTrack · ML-Based Intelligent Finance Tracker
+        </div>
+      </div>
+
+      <!-- SCANNER (full screen overlay above tab bar) -->
+      <div id="scanWrap">
+        <video id="video" playsinline muted></video>
+        <div class="scan-top">
+          <button id="scanClose">Cancel</button>
+          <button id="scanManual">Enter manually</button>
+        </div>
+        <div class="scan-overlay">
+          <div class="scan-frame">
+            <span class="c3"></span><span class="c4"></span>
+          </div>
+          <div class="scan-hint">Point at a UPI QR code</div>
+        </div>
+        <div class="scan-err" id="scanErr">
+          <div style="font-size: 46px">📷</div>
+          <p style="font-size: 16px; margin: 14px 0 4px; font-weight: 600">
+            Camera unavailable
+          </p>
+          <p
+            style="font-size: 14px; opacity: 0.8; line-height: 1.5"
+            id="scanErrMsg"
+          ></p>
+          <button
+            class="btn btn-primary"
+            style="max-width: 240px; margin-top: 18px"
+            id="scanErrManual"
+          >
+            Enter manually
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB BAR -->
+      <nav id="tabbar">
+        <button class="tab active" data-tab="home">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M3 10l9-7 9 7v9a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1z"
+            /></svg
+          ><span>Home</span>
+        </button>
+        <button class="tab" data-tab="history">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M4 6h16M4 12h16M4 18h10" stroke-linecap="round" /></svg
+          ><span>History</span>
+        </button>
+        <button class="tab scan-tab" data-tab="scan">
+          <div class="scan-btn">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M4 7V5a1 1 0 011-1h2M17 4h2a1 1 0 011 1v2M20 17v2a1 1 0 01-1 1h-2M7 20H5a1 1 0 01-1-1v-2M7 12h10"
+                stroke-linecap="round"
+              />
+            </svg>
+          </div>
+          <span>Scan</span>
+        </button>
+        <button class="tab" data-tab="reports">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M4 20V10M10 20V4M16 20v-7M22 20H2"
+              stroke-linecap="round"
+            /></svg
+          ><span>Reports</span>
+        </button>
+        <button class="tab" data-tab="profile">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 21c0-4 4-6 8-6s8 2 8 6" stroke-linecap="round" /></svg
+          ><span>Profile</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- ================= CONFIRM SHEET ================= -->
+    <div id="sheetBg">
+      <div id="sheet">
+        <div class="grabber"></div>
+        <div class="sheet-title" id="sheetTitle">Confirm expense</div>
+        <div class="input-card">
+          <div class="input-line">
+            <label>Merchant</label
+            ><input id="s_merchant" placeholder="Merchant name" />
+          </div>
+          <div class="input-line">
+            <label>Amount ₹</label
+            ><input
+              id="s_amount"
+              type="number"
+              inputmode="decimal"
+              placeholder="0.00"
+            />
+          </div>
+        </div>
+        <div class="section-title" style="margin: 6px 20px 4px">
+          Category
+          <span
+            id="catAuto"
+            style="color: var(--green); text-transform: none; font-weight: 600"
+          ></span>
+        </div>
+        <div class="cat-grid" id="catGrid"></div>
+        <div class="sheet-actions">
+          <button class="btn btn-primary" id="s_save">Save expense</button>
+          <button class="btn btn-ghost" id="s_cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /* =========================================================
+   FinTrack — single-file PWA
+   Persistence: localStorage (works on a hosted HTTPS site)
+   QR: getUserMedia + jsQR  |  Categorizer: keyword rules
+   ========================================================= */
+
+      const CATS = {
+        Food: { color: "#FF9500", icon: "🍔" },
+        Travel: { color: "#007AFF", icon: "🚕" },
+        Shopping: { color: "#AF52DE", icon: "🛍" },
+        Utilities: { color: "#5AC8FA", icon: "💡" },
+        Entertainment: { color: "#FF2D55", icon: "🎬" },
+        Healthcare: { color: "#34C759", icon: "➕" },
+        Others: { color: "#8E8E93", icon: "💳" },
+      };
+
+      /* rules engine — stand-in for the "ML model". Improves by adding keywords. */
+      const RULES = {
+        Food: [
+          "swiggy",
+          "zomato",
+          "dominos",
+          "domino",
+          "mcdonald",
+          "kfc",
+          "restaurant",
+          "cafe",
+          "coffee",
+          "food",
+          "hotel",
+          "dhaba",
+          "bakery",
+          "pizza",
+          "burger",
+          "biryani",
+          "chai",
+          "tea",
+          "juice",
+          "sweet",
+          "kitchen",
+          "eats",
+          "barbeque",
+          "starbucks",
+        ],
+        Travel: [
+          "uber",
+          "ola",
+          "rapido",
+          "irctc",
+          "redbus",
+          "metro",
+          "petrol",
+          "fuel",
+          "hp ",
+          "hpcl",
+          "bharat petroleum",
+          "indianoil",
+          "indian oil",
+          "iocl",
+          "makemytrip",
+          "goibibo",
+          "flight",
+          "railway",
+          "cab",
+          "taxi",
+          "toll",
+          "parking",
+          "bus",
+          "airlines",
+          "indigo",
+        ],
+        Shopping: [
+          "amazon",
+          "flipkart",
+          "myntra",
+          "ajio",
+          "meesho",
+          "mall",
+          "store",
+          "mart",
+          "dmart",
+          "reliance",
+          "shop",
+          "bigbasket",
+          "blinkit",
+          "zepto",
+          "nykaa",
+          "decathlon",
+          "lifestyle",
+          "trends",
+          "supermarket",
+        ],
+        Utilities: [
+          "electricity",
+          "water",
+          "gas",
+          "recharge",
+          "jio",
+          "airtel",
+          "vodafone",
+          "vi ",
+          "bsnl",
+          "broadband",
+          "bill",
+          "mseb",
+          "postpaid",
+          "prepaid",
+          "dth",
+          "wifi",
+          "fastag",
+          "tata power",
+          "adani",
+        ],
+        Entertainment: [
+          "netflix",
+          "prime",
+          "hotstar",
+          "spotify",
+          "bookmyshow",
+          "pvr",
+          "inox",
+          "game",
+          "movie",
+          "cinema",
+          "youtube",
+          "disney",
+          "gaana",
+          "jiosaavn",
+        ],
+        Healthcare: [
+          "pharmacy",
+          "medical",
+          "hospital",
+          "clinic",
+          "apollo",
+          "medplus",
+          "pharmeasy",
+          "1mg",
+          "netmeds",
+          "doctor",
+          "health",
+          "diagnostic",
+          "lab",
+          "dental",
+          "wellness",
+        ],
+      };
+
+      function categorize(text) {
+        const t = (text || "").toLowerCase();
+        for (const cat in RULES) {
+          if (RULES[cat].some((k) => t.includes(k))) return cat;
+        }
+        return "Others";
+      }
+
+      /* ---------- storage ---------- */
+      const DB = {
+        users() {
+          try {
+            return JSON.parse(localStorage.getItem("ft_users") || "{}");
+          } catch {
+            return {};
+          }
+        },
+        saveUsers(u) {
+          localStorage.setItem("ft_users", JSON.stringify(u));
+        },
+        session() {
+          return localStorage.getItem("ft_session");
+        },
+        setSession(e) {
+          e
+            ? localStorage.setItem("ft_session", e)
+            : localStorage.removeItem("ft_session");
+        },
+        txKey(e) {
+          return "ft_tx_" + e;
+        },
+        tx(e) {
+          try {
+            return JSON.parse(localStorage.getItem(this.txKey(e)) || "[]");
+          } catch {
+            return [];
+          }
+        },
+        saveTx(e, list) {
+          localStorage.setItem(this.txKey(e), JSON.stringify(list));
+        },
+      };
+
+      let CURRENT = null; // current user email
+      let SHEET_CAT = "Others";
+
+      /* ---------- helpers ---------- */
+      const $ = (id) => document.getElementById(id);
+      const money = (n) =>
+        "₹" +
+        Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+      const moneyP = (n) =>
+        "₹" +
+        Number(n || 0).toLocaleString("en-IN", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+      function esc(s) {
+        return (s || "").replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      }
+      function thisMonth(list) {
+        const now = new Date();
+        return list.filter((t) => {
+          const d = new Date(t.date);
+          return (
+            d.getMonth() === now.getMonth() &&
+            d.getFullYear() === now.getFullYear()
+          );
+        });
+      }
+      function relTime(iso) {
+        const d = new Date(iso),
+          now = new Date(),
+          diff = (now - d) / 1000;
+        if (diff < 60) return "Just now";
+        if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+        if (d.toDateString() === now.toDateString())
+          return (
+            "Today, " +
+            d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+          );
+        return (
+          d.toLocaleDateString([], { day: "numeric", month: "short" }) +
+          ", " +
+          d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        );
+      }
+
+      /* ====================== AUTH ====================== */
+      let signupMode = false;
+      function renderAuthMode() {
+        $("nameField").classList.toggle("hidden", !signupMode);
+        $("authBtn").textContent = signupMode ? "Create Account" : "Log In";
+        $("switchText").textContent = signupMode
+          ? "Have an account?"
+          : "New here?";
+        $("switchBtn").textContent = signupMode ? "Log in" : "Create account";
+        $("f_pass").autocomplete = signupMode
+          ? "new-password"
+          : "current-password";
+        $("authErr").textContent = "";
+      }
+      $("switchBtn").onclick = () => {
+        signupMode = !signupMode;
+        renderAuthMode();
+      };
+
+      $("authBtn").onclick = () => {
+        const email = $("f_email").value.trim().toLowerCase();
+        const pass = $("f_pass").value;
+        const name = $("f_name").value.trim();
+        const err = $("authErr");
+        if (!email || !pass) {
+          err.textContent = "Enter email and password.";
+          return;
+        }
+        const users = DB.users();
+        if (signupMode) {
+          if (!name) {
+            err.textContent = "Enter your name.";
+            return;
+          }
+          if (users[email]) {
+            err.textContent = "That email is already registered.";
+            return;
+          }
+          users[email] = { name, pass };
+          DB.saveUsers(users);
+          login(email);
+        } else {
+          if (!users[email]) {
+            err.textContent = "No account found. Create one?";
+            return;
+          }
+          if (users[email].pass !== pass) {
+            err.textContent = "Incorrect password.";
+            return;
+          }
+          login(email);
+        }
+      };
+
+      function login(email) {
+        CURRENT = email;
+        DB.setSession(email);
+        $("auth").classList.add("hidden");
+        $("app").classList.remove("hidden");
+        const u = DB.users()[email];
+        $("pName").textContent = u.name;
+        $("pEmail").textContent = email;
+        $("pAvatar").textContent = (u.name[0] || "U").toUpperCase();
+        $("homeGreeting").textContent = "Hi, " + u.name.split(" ")[0];
+        switchTab("home");
+        refreshAll();
+      }
+      $("logoutBtn").onclick = () => {
+        stopCamera();
+        DB.setSession(null);
+        CURRENT = null;
+        $("app").classList.add("hidden");
+        $("auth").classList.remove("hidden");
+        $("f_pass").value = "";
+        signupMode = false;
+        renderAuthMode();
+      };
+
+      /* ====================== TABS ====================== */
+      function switchTab(tab) {
+        if (tab === "scan") {
+          openScanner();
+          return;
+        }
+        document
+          .querySelectorAll(".screen")
+          .forEach((s) => s.classList.remove("active"));
+        $("screen-" + tab).classList.add("active");
+        document
+          .querySelectorAll(".tab")
+          .forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
+        if (tab === "home" || tab === "reports" || tab === "history")
+          refreshAll();
+      }
+      document.querySelectorAll(".tab").forEach((t) => {
+        t.onclick = () => switchTab(t.dataset.tab);
+      });
+
+      /* ====================== RENDER ====================== */
+      function refreshAll() {
+        renderHome();
+        renderHistory();
+        renderReports();
+        renderProfile();
+      }
+
+      function catRow(t) {
+        const c = CATS[t.category] || CATS.Others;
+        return `<div class="row">
+    <div class="icon" style="background:${c.color}">${c.icon}</div>
+    <div class="meta"><div class="t">${esc(t.merchant)}</div><div class="s">${t.category} · ${relTime(t.date)}</div></div>
+    <div class="amt">-${money(t.amount)}</div>
+  </div>`;
+      }
+
+      function renderHome() {
+        const all = DB.tx(CURRENT),
+          m = thisMonth(all);
+        const total = m.reduce((s, t) => s + Number(t.amount), 0);
+        $("heroAmount").textContent = money(total);
+        $("heroCount").textContent = m.length
+          ? `${m.length} transaction${m.length > 1 ? "s" : ""} this month`
+          : "No transactions this month";
+
+        // bars by category
+        const byCat = {};
+        m.forEach(
+          (t) =>
+            (byCat[t.category] = (byCat[t.category] || 0) + Number(t.amount)),
+        );
+        const entries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+        const max = Math.max(...entries.map((e) => e[1]), 1);
+        $("homeBars").innerHTML = entries.length
+          ? `<div style="padding:10px 0">` +
+            entries
+              .map(([cat, v]) => {
+                const c = CATS[cat];
+                return `<div class="barrow"><div class="name"><span class="dot" style="background:${c.color}"></span>${cat}</div>
+        <div class="bartrack"><div class="barfill" style="width:${Math.max((v / max) * 100, 4)}%;background:${c.color}"></div></div>
+        <div class="val">${money(v)}</div></div>`;
+              })
+              .join("") +
+            `</div>`
+          : `<div class="empty"><div class="em">📈</div><p>Scan a payment to see your spending breakdown.</p></div>`;
+
+        // recent
+        const recent = [...all]
+          .sort((a, b) => new Date(b.date) - new Date(a.date))
+          .slice(0, 5);
+        $("homeRecent").innerHTML = recent.length
+          ? recent.map(catRow).join("")
+          : `<div class="empty"><div class="em">🧾</div><p>No transactions yet.<br>Tap Scan to add your first.</p></div>`;
+      }
+
+      /* history with search + filter */
+      let activeFilter = "All",
+        searchTerm = "";
+      function renderFilterChips() {
+        const cats = ["All", ...Object.keys(CATS)];
+        $("filterChips").innerHTML = cats
+          .map(
+            (c) =>
+              `<div class="fchip ${c === activeFilter ? "sel" : ""}" data-f="${c}">${c}</div>`,
+          )
+          .join("");
+        $("filterChips")
+          .querySelectorAll(".fchip")
+          .forEach(
+            (ch) =>
+              (ch.onclick = () => {
+                activeFilter = ch.dataset.f;
+                renderHistory();
+              }),
+          );
+      }
+      function renderHistory() {
+        renderFilterChips();
+        let all = [...DB.tx(CURRENT)].sort(
+          (a, b) => new Date(b.date) - new Date(a.date),
+        );
+        if (activeFilter !== "All")
+          all = all.filter((t) => t.category === activeFilter);
+        if (searchTerm)
+          all = all.filter((t) =>
+            t.merchant.toLowerCase().includes(searchTerm.toLowerCase()),
+          );
+        $("historyList").innerHTML = all.length
+          ? all.map(catRow).join("")
+          : `<div class="empty"><div class="em">🔍</div><p>No matching transactions.</p></div>`;
+      }
+      $("searchInput").oninput = (e) => {
+        searchTerm = e.target.value;
+        renderHistory();
+      };
+
+      /* reports: donut + totals + insight */
+      function renderReports() {
+        const m = thisMonth(DB.tx(CURRENT));
+        const total = m.reduce((s, t) => s + Number(t.amount), 0);
+        const byCat = {};
+        m.forEach(
+          (t) =>
+            (byCat[t.category] = (byCat[t.category] || 0) + Number(t.amount)),
+        );
+        const entries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+
+        drawDonut(entries, total);
+        $("donutTotal").textContent = total
+          ? `Total this month · ${money(total)}`
+          : "";
+
+        $("reportList").innerHTML = entries.length
+          ? entries
+              .map(([cat, v]) => {
+                const c = CATS[cat],
+                  pct = total ? Math.round((v / total) * 100) : 0;
+                return `<div class="row"><div class="icon" style="background:${c.color}">${c.icon}</div>
+      <div class="meta"><div class="t">${cat}</div><div class="s">${pct}% of spending</div></div>
+      <div class="amt">${money(v)}</div></div>`;
+              })
+              .join("")
+          : `<div class="empty"><div class="em">📊</div><p>No data this month yet.</p></div>`;
+
+        if (entries.length) {
+          const [topCat, topVal] = entries[0];
+          const pct = Math.round((topVal / total) * 100);
+          $("insightCard").innerHTML =
+            `Your biggest category this month is <b>${topCat}</b> at ${money(topVal)} — about <b>${pct}%</b> of your ${money(total)} total spend across ${m.length} transaction${m.length > 1 ? "s" : ""}.`;
+        } else {
+          $("insightCard").textContent =
+            "Insights appear once you've logged some expenses this month.";
+        }
+      }
+
+      function drawDonut(entries, total) {
+        const cv = $("donut"),
+          ctx = cv.getContext("2d");
+        const W = cv.width,
+          cx = W / 2,
+          cy = W / 2,
+          R = 95,
+          r = 58;
+        ctx.clearRect(0, 0, W, W);
+        if (!total) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, R, 0, 7);
+          ctx.arc(cx, cy, r, 0, 7, true);
+          ctx.fillStyle = "#E5E5EA";
+          ctx.fill();
+          return;
+        }
+        let start = -Math.PI / 2;
+        entries.forEach(([cat, v]) => {
+          const ang = (v / total) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, R, start, start + ang);
+          ctx.arc(cx, cy, r, start + ang, start, true);
+          ctx.closePath();
+          ctx.fillStyle = CATS[cat].color;
+          ctx.fill();
+          start += ang;
+        });
+        ctx.fillStyle = "#1C1C1E";
+        ctx.font = "700 26px -apple-system,system-ui";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(money(total), cx, cy - 6);
+        ctx.fillStyle = "#8E8E93";
+        ctx.font = "500 12px -apple-system,system-ui";
+        ctx.fillText("this month", cx, cy + 14);
+      }
+
+      function renderProfile() {
+        const all = DB.tx(CURRENT);
+        $("pTxCount").textContent = all.length;
+        $("pTotal").textContent = money(
+          all.reduce((s, t) => s + Number(t.amount), 0),
+        );
+      }
+
+      /* ====================== SHEET ====================== */
+      function openSheet(prefill = {}) {
+        $("s_merchant").value = prefill.merchant || "";
+        $("s_amount").value = prefill.amount || "";
+        SHEET_CAT = prefill.category || "Others";
+        $("sheetTitle").textContent = prefill.fromScan
+          ? "Confirm expense"
+          : "Add expense";
+        $("catAuto").textContent =
+          prefill.fromScan && prefill.merchant ? "· auto: " + SHEET_CAT : "";
+        renderCatGrid();
+        $("sheetBg").classList.add("active");
+        if (!prefill.merchant) setTimeout(() => $("s_merchant").focus(), 250);
+        else if (!prefill.amount) setTimeout(() => $("s_amount").focus(), 250);
+      }
+      function closeSheet() {
+        $("sheetBg").classList.remove("active");
+      }
+      function renderCatGrid() {
+        $("catGrid").innerHTML = Object.keys(CATS)
+          .map(
+            (c) =>
+              `<div class="cat-chip ${c === SHEET_CAT ? "sel" : ""}" data-c="${c}">${CATS[c].icon} ${c}</div>`,
+          )
+          .join("");
+        $("catGrid")
+          .querySelectorAll(".cat-chip")
+          .forEach(
+            (ch) =>
+              (ch.onclick = () => {
+                SHEET_CAT = ch.dataset.c;
+                renderCatGrid();
+                $("catAuto").textContent = "";
+              }),
+          );
+      }
+      // re-categorize live as merchant is typed (only if user hasn't manually picked)
+      let userPickedCat = false;
+      $("s_merchant").addEventListener("input", (e) => {
+        if (userPickedCat) return;
+        SHEET_CAT = categorize(e.target.value);
+        $("catAuto").textContent = e.target.value ? "· auto: " + SHEET_CAT : "";
+        renderCatGrid();
+      });
+      $("catGrid").addEventListener(
+        "click",
+        () => {
+          userPickedCat = true;
+        },
+        true,
+      );
+
+      $("s_cancel").onclick = closeSheet;
+      $("s_save").onclick = () => {
+        const merchant = $("s_merchant").value.trim();
+        const amount = parseFloat($("s_amount").value);
+        if (!merchant) {
+          $("s_merchant").focus();
+          return;
+        }
+        if (!amount || amount <= 0) {
+          $("s_amount").focus();
+          return;
+        }
+        const list = DB.tx(CURRENT);
+        list.push({
+          id: Date.now(),
+          merchant,
+          amount,
+          category: SHEET_CAT,
+          date: new Date().toISOString(),
+          status: "Success",
+          method: "UPI",
+        });
+        DB.saveTx(CURRENT, list);
+        closeSheet();
+        userPickedCat = false;
+        switchTab("home");
+      };
+
+      /* ====================== SCANNER ====================== */
+      let stream = null,
+        scanning = false,
+        rafId = null;
+      const video = $("video");
+      const canvas = document.createElement("canvas");
+      const cctx = canvas.getContext("2d", { willReadFrequently: true });
+
+      async function openScanner() {
+        $("scanWrap").classList.add("active");
+        $("scanErr").style.display = "none";
+        document
+          .querySelectorAll(".tab")
+          .forEach((t) =>
+            t.classList.toggle("active", t.dataset.tab === "scan"),
+          );
+        try {
+          if (typeof jsQR === "undefined")
+            throw new Error(
+              "Scanner library didn't load — check your connection and reload.",
+            );
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" },
+          });
+          video.srcObject = stream;
+          await video.play();
+          scanning = true;
+          tick();
+        } catch (e) {
+          showScanError(e);
+        }
+      }
+      function showScanError(e) {
+        $("scanErr").style.display = "flex";
+        let msg = e && e.message ? e.message : "Could not start the camera.";
+        if (e && e.name === "NotAllowedError")
+          msg =
+            "Camera permission was denied. Enable it in Settings → Safari → Camera, then reload.";
+        if (location.protocol !== "https:" && location.hostname !== "localhost")
+          msg =
+            "The camera needs a secure (https) address. Host this app on https and reopen.";
+        $("scanErrMsg").textContent = msg;
+      }
+      function tick() {
+        if (!scanning) return;
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          cctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const img = cctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(img.data, img.width, img.height, {
+            inversionAttempts: "dontInvert",
+          });
+          if (code && code.data) {
+            onQR(code.data);
+            return;
+          }
+        }
+        rafId = requestAnimationFrame(tick);
+      }
+      function stopCamera() {
+        scanning = false;
+        if (rafId) cancelAnimationFrame(rafId);
+        if (stream) {
+          stream.getTracks().forEach((t) => t.stop());
+          stream = null;
+        }
+        video.srcObject = null;
+        $("scanWrap").classList.remove("active");
+      }
+      function closeScanner(goHome = true) {
+        stopCamera();
+        if (goHome) switchTab("home");
+      }
+
+      $("scanClose").onclick = () => closeScanner();
+      $("scanManual").onclick = () => {
+        stopCamera();
+        $("scanWrap").classList.remove("active");
+        switchTab("home");
+        userPickedCat = false;
+        openSheet({});
+      };
+      $("scanErrManual").onclick = $("scanManual").onclick;
+
+      /* parse a UPI QR string: upi://pay?pa=..&pn=Merchant&am=100&tn=note */
+      function parseUPI(data) {
+        try {
+          let merchant = "",
+            amount = "";
+          if (/^upi:\/\//i.test(data) || data.includes("pa=")) {
+            const q = data.split("?")[1] || data;
+            const params = new URLSearchParams(q);
+            merchant = decodeURIComponent(params.get("pn") || "").trim();
+            amount = params.get("am") || "";
+            const pa = params.get("pa") || "",
+              tn = params.get("tn") || "";
+            const blob = [merchant, tn, pa].join(" ");
+            if (!merchant && pa) merchant = pa.split("@")[0];
+            return { merchant: merchant || "UPI Merchant", amount, blob };
+          }
+        } catch (e) {}
+        // not a UPI QR — use raw text as merchant hint
+        return { merchant: data.slice(0, 40), amount: "", blob: data };
+      }
+      function onQR(data) {
+        if (navigator.vibrate) navigator.vibrate(40);
+        scanning = false;
+        const { merchant, amount, blob } = parseUPI(data);
+        stopCamera();
+        $("scanWrap").classList.remove("active");
+        switchTab("home");
+        userPickedCat = false;
+        openSheet({
+          merchant,
+          amount,
+          category: categorize(blob),
+          fromScan: true,
+        });
+      }
+
+      /* ====================== PROFILE ACTIONS ====================== */
+      $("manualAddBtn").onclick = () => {
+        userPickedCat = false;
+        openSheet({});
+      };
+      $("clearBtn").onclick = () => {
+        if (confirm("Delete all your transactions? This can't be undone.")) {
+          DB.saveTx(CURRENT, []);
+          refreshAll();
+          switchTab("home");
+        }
+      };
+
+      /* ====================== BOOT ====================== */
+      renderAuthMode();
+      const sess = DB.session();
+      if (sess && DB.users()[sess]) login(sess);
+    </script>
+  </body>
+</html>
