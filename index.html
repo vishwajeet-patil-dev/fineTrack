@@ -11411,6 +11411,36 @@
       .sheet-actions {
         padding: 6px 16px 0;
       }
+      #statusBg {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        display: none;
+        align-items: flex-end;
+        z-index: 110;
+      }
+      #statusBg.active {
+        display: flex;
+      }
+      #statusCard {
+        background: var(--bg);
+        width: 100%;
+        border-radius: 18px 18px 0 0;
+        padding: 8px 0 calc(env(safe-area-inset-bottom) + 16px);
+      }
+      #statusNote {
+        font-size: 14px;
+        color: var(--orange);
+        text-align: center;
+        padding: 0 24px 10px;
+        line-height: 1.4;
+      }
+      .pay-note {
+        font-size: 13px;
+        color: var(--label2);
+        text-align: center;
+        margin: 2px 16px 10px;
+      }
 
       /* ---------- search / filter ---------- */
       .searchbar {
@@ -11794,9 +11824,40 @@
           ></span>
         </div>
         <div class="cat-grid" id="catGrid"></div>
+        <div class="sheet-actions" id="sheetActions"></div>
+      </div>
+    </div>
+
+    <!-- ================= PAYMENT STATUS MODAL ================= -->
+    <div id="statusBg">
+      <div id="statusCard">
+        <div class="grabber"></div>
+        <div class="sheet-title">Payment status</div>
+        <div id="statusNote"></div>
+        <div class="input-card" style="padding: 14px 16px">
+          <div
+            id="statusSummary"
+            style="font-size: 15px; line-height: 1.4"
+          ></div>
+        </div>
         <div class="sheet-actions">
-          <button class="btn btn-primary" id="s_save">Save expense</button>
-          <button class="btn btn-ghost" id="s_cancel">Cancel</button>
+          <button class="btn btn-primary" id="st_success">
+            Payment successful
+          </button>
+          <button
+            class="btn"
+            id="st_fail"
+            style="background: #ffe5e3; color: var(--red); margin-top: 8px"
+          >
+            Payment failed
+          </button>
+          <button
+            class="btn btn-ghost"
+            id="st_cancel"
+            style="color: var(--label2)"
+          >
+            Discard
+          </button>
         </div>
       </div>
     </div>
@@ -11995,6 +12056,7 @@
 
       let CURRENT = null; // current user email
       let SHEET_CAT = "Others";
+      let SHEET_VPA = "";
 
       /* ---------- helpers ---------- */
       const $ = (id) => document.getElementById(id);
@@ -12149,16 +12211,17 @@
 
       function catRow(t) {
         const c = CATS[t.category] || CATS.Others;
+        const failed = t.status === "Failed";
         return `<div class="row">
     <div class="icon" style="background:${c.color}">${c.icon}</div>
-    <div class="meta"><div class="t">${esc(t.merchant)}</div><div class="s">${t.category} · ${relTime(t.date)}</div></div>
-    <div class="amt">-${money(t.amount)}</div>
+    <div class="meta"><div class="t">${esc(t.merchant)}</div><div class="s">${t.category} · ${relTime(t.date)}${failed ? ' · <span style="color:var(--red);font-weight:600">Failed</span>' : ""}</div></div>
+    <div class="amt" style="${failed ? "color:var(--label3);text-decoration:line-through" : ""}">-${money(t.amount)}</div>
   </div>`;
       }
 
       function renderHome() {
         const all = DB.tx(CURRENT),
-          m = thisMonth(all);
+          m = thisMonth(all).filter((t) => t.status !== "Failed");
         const total = m.reduce((s, t) => s + Number(t.amount), 0);
         $("heroAmount").textContent = money(total);
         $("heroCount").textContent = m.length
@@ -12238,7 +12301,9 @@
 
       /* reports: donut + totals + insight */
       function renderReports() {
-        const m = thisMonth(DB.tx(CURRENT));
+        const m = thisMonth(DB.tx(CURRENT)).filter(
+          (t) => t.status !== "Failed",
+        );
         const total = m.reduce((s, t) => s + Number(t.amount), 0);
         const byCat = {};
         m.forEach(
@@ -12326,12 +12391,14 @@
         $("s_merchant").value = prefill.merchant || "";
         $("s_amount").value = prefill.amount || "";
         SHEET_CAT = prefill.category || "Others";
+        SHEET_VPA = prefill.vpa || "";
         $("sheetTitle").textContent = prefill.fromScan
-          ? "Confirm expense"
+          ? "Confirm payment"
           : "Add expense";
         $("catAuto").textContent =
           prefill.fromScan && prefill.merchant ? "· auto: " + SHEET_CAT : "";
         renderCatGrid();
+        renderSheetActions();
         $("sheetBg").classList.add("active");
         if (!prefill.merchant) setTimeout(() => $("s_merchant").focus(), 250);
         else if (!prefill.amount) setTimeout(() => $("s_amount").focus(), 250);
@@ -12373,32 +12440,134 @@
         true,
       );
 
-      $("s_cancel").onclick = closeSheet;
-      $("s_save").onclick = () => {
+      /* ---- read & validate the sheet ---- */
+      function readSheet() {
         const merchant = $("s_merchant").value.trim();
         const amount = parseFloat($("s_amount").value);
         if (!merchant) {
           $("s_merchant").focus();
-          return;
+          return null;
         }
         if (!amount || amount <= 0) {
           $("s_amount").focus();
-          return;
+          return null;
         }
+        return { merchant, amount, category: SHEET_CAT, vpa: SHEET_VPA };
+      }
+
+      /* ---- save a transaction with a given status ---- */
+      function saveExpense(status, draft) {
+        const d = draft || readSheet();
+        if (!d) return;
         const list = DB.tx(CURRENT);
         list.push({
           id: Date.now(),
-          merchant,
-          amount,
-          category: SHEET_CAT,
+          merchant: d.merchant,
+          amount: d.amount,
+          category: d.category,
+          vpa: d.vpa || "",
           date: new Date().toISOString(),
-          status: "Success",
+          status,
           method: "UPI",
         });
         DB.saveTx(CURRENT, list);
         closeSheet();
         userPickedCat = false;
         switchTab("home");
+      }
+
+      /* ---- build a UPI deep link for a specific app ---- */
+      function buildUpiLink(app, d) {
+        const p = new URLSearchParams();
+        p.set("pa", d.vpa);
+        if (d.merchant) p.set("pn", d.merchant);
+        p.set("am", Number(d.amount).toFixed(2));
+        p.set("cu", "INR");
+        p.set("tn", "Payment via FinTrack");
+        const base = {
+          gpay: "tez://upi/pay?",
+          phonepe: "phonepe://pay?",
+          paytm: "paytmmp://pay?",
+          upi: "upi://pay?",
+        }[app];
+        return base + p.toString();
+      }
+
+      /* ---- render the action buttons (pay vs log only) ---- */
+      function renderSheetActions() {
+        const el = $("sheetActions");
+        if (SHEET_VPA) {
+          el.innerHTML = `<div class="pay-note">Paying ${esc(SHEET_VPA)} — opens your UPI app</div>
+       <div style="display:flex;gap:8px;margin-bottom:8px">
+         <button class="btn btn-primary pay" data-app="gpay" style="flex:1">Google Pay</button>
+         <button class="btn pay" data-app="phonepe" style="flex:1;background:#5f259f;color:#fff">PhonePe</button>
+       </div>
+       <div style="display:flex;gap:8px;margin-bottom:8px">
+         <button class="btn pay" data-app="paytm" style="flex:1;background:#022e63;color:#fff">Paytm</button>
+         <button class="btn pay" data-app="upi" style="flex:1;background:#E5E5EA;color:#1C1C1E">Other UPI</button>
+       </div>
+       <button class="btn btn-ghost" id="s_logonly">Just log it (no payment)</button>
+       <button class="btn btn-ghost" id="s_cancel" style="color:var(--label2)">Cancel</button>`;
+        } else {
+          el.innerHTML = `<button class="btn btn-primary" id="s_save">Save expense</button>
+       <button class="btn btn-ghost" id="s_cancel" style="color:var(--label2)">Cancel</button>`;
+        }
+        el.querySelectorAll(".pay").forEach(
+          (b) => (b.onclick = () => initiatePayment(b.dataset.app)),
+        );
+        const logonly = $("s_logonly");
+        if (logonly) logonly.onclick = () => saveExpense("Success");
+        const save = $("s_save");
+        if (save) save.onclick = () => saveExpense("Success");
+        $("s_cancel").onclick = closeSheet;
+      }
+
+      /* ---- launch the UPI app, then confirm status on return ---- */
+      let pending = null,
+        paymentArmed = false;
+      function initiatePayment(app) {
+        const d = readSheet();
+        if (!d) return;
+        pending = d;
+        paymentArmed = true;
+        const link = buildUpiLink(app, d);
+        // fallback: if the page never went to background, the app didn't open
+        setTimeout(() => {
+          if (document.visibilityState === "visible" && paymentArmed)
+            askStatus(true);
+        }, 2500);
+        window.location.href = link;
+      }
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible" && paymentArmed && pending)
+          askStatus(false);
+      });
+
+      function askStatus(notOpened) {
+        paymentArmed = false;
+        closeSheet();
+        $("statusNote").textContent = notOpened
+          ? "Couldn't open that UPI app. If you paid another way, mark it below — or discard."
+          : "";
+        $("statusSummary").innerHTML =
+          `<b>${esc(pending.merchant)}</b><br>${moneyP(pending.amount)} · ${pending.category}`;
+        $("statusBg").classList.add("active");
+      }
+      function closeStatus() {
+        $("statusBg").classList.remove("active");
+        pending = null;
+      }
+
+      $("st_success").onclick = () => {
+        if (pending) saveExpense("Success", pending);
+        closeStatus();
+      };
+      $("st_fail").onclick = () => {
+        if (pending) saveExpense("Failed", pending);
+        closeStatus();
+      };
+      $("st_cancel").onclick = () => {
+        closeStatus();
       };
 
       /* ====================== SCANNER ====================== */
@@ -12500,16 +12669,21 @@
               tn = params.get("tn") || "";
             const blob = [merchant, tn, pa].join(" ");
             if (!merchant && pa) merchant = pa.split("@")[0];
-            return { merchant: merchant || "UPI Merchant", amount, blob };
+            return {
+              merchant: merchant || "UPI Merchant",
+              amount,
+              blob,
+              vpa: pa,
+            };
           }
         } catch (e) {}
-        // not a UPI QR — use raw text as merchant hint
-        return { merchant: data.slice(0, 40), amount: "", blob: data };
+        // not a UPI QR — use raw text as merchant hint, no payee to pay
+        return { merchant: data.slice(0, 40), amount: "", blob: data, vpa: "" };
       }
       function onQR(data) {
         if (navigator.vibrate) navigator.vibrate(40);
         scanning = false;
-        const { merchant, amount, blob } = parseUPI(data);
+        const { merchant, amount, blob, vpa } = parseUPI(data);
         stopCamera();
         $("scanWrap").classList.remove("active");
         switchTab("home");
@@ -12518,6 +12692,7 @@
           merchant,
           amount,
           category: categorize(blob),
+          vpa,
           fromScan: true,
         });
       }
