@@ -11408,6 +11408,86 @@
         color: var(--green);
         font-weight: 600;
       }
+      .appbadge {
+        width: 58px;
+        border-radius: 13px;
+        background: var(--card);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        border: 1px solid var(--sep);
+        flex-shrink: 0;
+      }
+      .appbadge .b {
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 800;
+        display: grid;
+        place-items: center;
+      }
+      .appbadge .l {
+        font-size: 9px;
+        color: var(--label2);
+      }
+      .apppop {
+        position: absolute;
+        right: 0;
+        bottom: 62px;
+        background: var(--card);
+        border-radius: 13px;
+        box-shadow: 0 10px 34px rgba(0, 0, 0, 0.2);
+        padding: 6px;
+        z-index: 30;
+        min-width: 172px;
+      }
+      .apppop .opt {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 11px 12px;
+        border-radius: 9px;
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .apppop .opt.sel {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+      .apppop .opt .b {
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 800;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .iconpicker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .iconpicker .ic {
+        width: 42px;
+        height: 42px;
+        border-radius: 11px;
+        background: var(--card);
+        display: grid;
+        place-items: center;
+        font-size: 21px;
+        border: 1.5px solid transparent;
+      }
+      .iconpicker .ic.sel {
+        border-color: var(--green);
+        background: var(--green-soft);
+      }
       .sheet-actions {
         padding: 6px 16px 0;
       }
@@ -11824,6 +11904,18 @@
           ></span>
         </div>
         <div class="cat-grid" id="catGrid"></div>
+        <div id="customCat" class="hidden" style="padding: 2px 16px 8px">
+          <div class="input-card" style="margin: 0 0 10px">
+            <div class="input-line">
+              <label>Name</label
+              ><input id="customCatName" placeholder="e.g. Rent" />
+            </div>
+          </div>
+          <div style="font-size: 13px; color: var(--label2); margin: 0 2px 8px">
+            Choose an icon
+          </div>
+          <div id="iconPicker" class="iconpicker"></div>
+        </div>
         <div class="sheet-actions" id="sheetActions"></div>
       </div>
     </div>
@@ -12052,11 +12144,84 @@
         saveTx(e, list) {
           localStorage.setItem(this.txKey(e), JSON.stringify(list));
         },
+        catsKey(e) {
+          return "ft_cats_" + e;
+        },
+        cats(e) {
+          try {
+            return JSON.parse(localStorage.getItem(this.catsKey(e)) || "{}");
+          } catch {
+            return {};
+          }
+        },
+        saveCats(e, o) {
+          localStorage.setItem(this.catsKey(e), JSON.stringify(o));
+        },
       };
 
       let CURRENT = null; // current user email
       let SHEET_CAT = "Others";
       let SHEET_VPA = "";
+      let SHEET_ICON = "🏷";
+
+      /* custom categories created by the user: { name:{icon,color} } */
+      let CUSTOM = {};
+      function loadCustom() {
+        CUSTOM = CURRENT ? DB.cats(CURRENT) : {};
+      }
+      function getCat(name) {
+        return CATS[name] || CUSTOM[name] || { color: "#8E8E93", icon: "🏷" };
+      }
+      const PALETTE = [
+        "#FF9500",
+        "#007AFF",
+        "#AF52DE",
+        "#5AC8FA",
+        "#FF2D55",
+        "#34C759",
+        "#FF6482",
+        "#30B0C7",
+        "#A2845E",
+        "#FFCC00",
+      ];
+      function pickColor(s) {
+        let h = 0;
+        for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+        return PALETTE[h % PALETTE.length];
+      }
+      const ICONS = [
+        "🏷",
+        "🏠",
+        "💼",
+        "🎓",
+        "🐾",
+        "🎁",
+        "🧾",
+        "✈️",
+        "🛒",
+        "🔧",
+        "📱",
+        "🎮",
+        "☕",
+        "🏥",
+        "🎉",
+        "📚",
+        "💸",
+        "🍿",
+      ];
+
+      /* UPI app preference — persists for current and future payments */
+      const UPI_APPS = {
+        gpay: { label: "GPay", badge: "G", color: "#1A73E8" },
+        phonepe: { label: "PhonePe", badge: "Pe", color: "#5F259F" },
+        paytm: { label: "Paytm", badge: "Pt", color: "#022E63" },
+        upi: { label: "Other UPI", badge: "UPI", color: "#0A9D58" },
+      };
+      let UPI_APP = localStorage.getItem("ft_upiapp") || "gpay";
+      function setUpiApp(a) {
+        UPI_APP = a;
+        localStorage.setItem("ft_upiapp", a);
+      }
 
       /* ---------- helpers ---------- */
       const $ = (id) => document.getElementById(id);
@@ -12160,6 +12325,7 @@
       function login(email) {
         CURRENT = email;
         DB.setSession(email);
+        loadCustom();
         $("auth").classList.add("hidden");
         $("app").classList.remove("hidden");
         const u = DB.users()[email];
@@ -12210,7 +12376,7 @@
       }
 
       function catRow(t) {
-        const c = CATS[t.category] || CATS.Others;
+        const c = getCat(t.category);
         const failed = t.status === "Failed";
         return `<div class="row">
     <div class="icon" style="background:${c.color}">${c.icon}</div>
@@ -12240,7 +12406,7 @@
           ? `<div style="padding:10px 0">` +
             entries
               .map(([cat, v]) => {
-                const c = CATS[cat];
+                const c = getCat(cat);
                 return `<div class="barrow"><div class="name"><span class="dot" style="background:${c.color}"></span>${cat}</div>
         <div class="bartrack"><div class="barfill" style="width:${Math.max((v / max) * 100, 4)}%;background:${c.color}"></div></div>
         <div class="val">${money(v)}</div></div>`;
@@ -12262,7 +12428,11 @@
       let activeFilter = "All",
         searchTerm = "";
       function renderFilterChips() {
-        const cats = ["All", ...Object.keys(CATS)];
+        const cats = [
+          "All",
+          ...Object.keys(CATS),
+          ...Object.keys(CUSTOM).filter((c) => !CATS[c]),
+        ];
         $("filterChips").innerHTML = cats
           .map(
             (c) =>
@@ -12320,7 +12490,7 @@
         $("reportList").innerHTML = entries.length
           ? entries
               .map(([cat, v]) => {
-                const c = CATS[cat],
+                const c = getCat(cat),
                   pct = total ? Math.round((v / total) * 100) : 0;
                 return `<div class="row"><div class="icon" style="background:${c.color}">${c.icon}</div>
       <div class="meta"><div class="t">${cat}</div><div class="s">${pct}% of spending</div></div>
@@ -12364,7 +12534,7 @@
           ctx.arc(cx, cy, R, start, start + ang);
           ctx.arc(cx, cy, r, start + ang, start, true);
           ctx.closePath();
-          ctx.fillStyle = CATS[cat].color;
+          ctx.fillStyle = getCat(cat).color;
           ctx.fill();
           start += ang;
         });
@@ -12392,6 +12562,8 @@
         $("s_amount").value = prefill.amount || "";
         SHEET_CAT = prefill.category || "Others";
         SHEET_VPA = prefill.vpa || "";
+        SHEET_ICON = "🏷";
+        $("customCatName").value = "Other";
         $("sheetTitle").textContent = prefill.fromScan
           ? "Confirm payment"
           : "Add expense";
@@ -12423,6 +12595,27 @@
                 $("catAuto").textContent = "";
               }),
           );
+        updateCustomPanel();
+      }
+      function updateCustomPanel() {
+        const show = SHEET_CAT === "Others";
+        $("customCat").classList.toggle("hidden", !show);
+        if (show) renderIconPicker();
+      }
+      function renderIconPicker() {
+        $("iconPicker").innerHTML = ICONS.map(
+          (i) =>
+            `<div class="ic ${i === SHEET_ICON ? "sel" : ""}" data-i="${i}">${i}</div>`,
+        ).join("");
+        $("iconPicker")
+          .querySelectorAll(".ic")
+          .forEach(
+            (el) =>
+              (el.onclick = () => {
+                SHEET_ICON = el.dataset.i;
+                renderIconPicker();
+              }),
+          );
       }
       // re-categorize live as merchant is typed (only if user hasn't manually picked)
       let userPickedCat = false;
@@ -12452,13 +12645,30 @@
           $("s_amount").focus();
           return null;
         }
-        return { merchant, amount, category: SHEET_CAT, vpa: SHEET_VPA };
+        let category = SHEET_CAT,
+          icon = null;
+        if (SHEET_CAT === "Others") {
+          const name = ($("customCatName").value || "").trim();
+          if (name && !/^others?$/i.test(name)) {
+            category = name;
+            icon = SHEET_ICON;
+          } else category = "Others";
+        }
+        return { merchant, amount, category, icon, vpa: SHEET_VPA };
       }
 
       /* ---- save a transaction with a given status ---- */
       function saveExpense(status, draft) {
         const d = draft || readSheet();
         if (!d) return;
+        // register a brand-new custom category so it shows everywhere
+        if (d.icon && !CATS[d.category]) {
+          CUSTOM[d.category] = {
+            icon: d.icon,
+            color: CUSTOM[d.category]?.color || pickColor(d.category),
+          };
+          DB.saveCats(CURRENT, CUSTOM);
+        }
         const list = DB.tx(CURRENT);
         list.push({
           id: Date.now(),
@@ -12493,32 +12703,52 @@
         return base + p.toString();
       }
 
-      /* ---- render the action buttons (pay vs log only) ---- */
+      /* ---- render the action buttons ---- */
+      function appBadgeHTML(a) {
+        const m = UPI_APPS[a];
+        return `<span class="b" style="background:${m.color}">${m.badge}</span><span class="l">${m.label}</span>`;
+      }
+      function renderAppPop() {
+        $("appPop").innerHTML = Object.entries(UPI_APPS)
+          .map(
+            ([k, m]) =>
+              `<div class="opt ${k === UPI_APP ? "sel" : ""}" data-a="${k}"><span class="b" style="background:${m.color}">${m.badge}</span>${m.label}</div>`,
+          )
+          .join("");
+        $("appPop")
+          .querySelectorAll(".opt")
+          .forEach(
+            (o) =>
+              (o.onclick = () => {
+                setUpiApp(o.dataset.a);
+                $("s_appbadge").innerHTML = appBadgeHTML(UPI_APP);
+                $("appPop").classList.add("hidden");
+                renderAppPop();
+              }),
+          );
+      }
       function renderSheetActions() {
         const el = $("sheetActions");
         if (SHEET_VPA) {
-          el.innerHTML = `<div class="pay-note">Paying ${esc(SHEET_VPA)} — opens your UPI app</div>
-       <div style="display:flex;gap:8px;margin-bottom:8px">
-         <button class="btn btn-primary pay" data-app="gpay" style="flex:1">Google Pay</button>
-         <button class="btn pay" data-app="phonepe" style="flex:1;background:#5f259f;color:#fff">PhonePe</button>
+          el.innerHTML = `<div class="pay-note">Paying ${esc(SHEET_VPA)}</div>
+       <div style="display:flex;gap:8px;align-items:stretch;margin-bottom:8px;position:relative">
+         <button class="btn btn-primary" id="s_pay" style="flex:1">Make payment</button>
+         <button id="s_appbadge" class="appbadge" aria-label="Change UPI app">${appBadgeHTML(UPI_APP)}</button>
+         <div id="appPop" class="apppop hidden"></div>
        </div>
-       <div style="display:flex;gap:8px;margin-bottom:8px">
-         <button class="btn pay" data-app="paytm" style="flex:1;background:#022e63;color:#fff">Paytm</button>
-         <button class="btn pay" data-app="upi" style="flex:1;background:#E5E5EA;color:#1C1C1E">Other UPI</button>
-       </div>
-       <button class="btn btn-ghost" id="s_logonly">Just log it (no payment)</button>
        <button class="btn btn-ghost" id="s_cancel" style="color:var(--label2)">Cancel</button>`;
+          $("s_pay").onclick = () => initiatePayment(UPI_APP);
+          renderAppPop();
+          $("s_appbadge").onclick = (e) => {
+            e.stopPropagation();
+            renderAppPop();
+            $("appPop").classList.toggle("hidden");
+          };
         } else {
           el.innerHTML = `<button class="btn btn-primary" id="s_save">Save expense</button>
        <button class="btn btn-ghost" id="s_cancel" style="color:var(--label2)">Cancel</button>`;
+          $("s_save").onclick = () => saveExpense("Success");
         }
-        el.querySelectorAll(".pay").forEach(
-          (b) => (b.onclick = () => initiatePayment(b.dataset.app)),
-        );
-        const logonly = $("s_logonly");
-        if (logonly) logonly.onclick = () => saveExpense("Success");
-        const save = $("s_save");
-        if (save) save.onclick = () => saveExpense("Success");
         $("s_cancel").onclick = closeSheet;
       }
 
@@ -12709,6 +12939,17 @@
           switchTab("home");
         }
       };
+
+      /* close the UPI app popover when tapping elsewhere */
+      document.addEventListener("click", (e) => {
+        const pop = $("appPop");
+        if (!pop || pop.classList.contains("hidden")) return;
+        if (
+          !pop.contains(e.target) &&
+          !(e.target.closest && e.target.closest("#s_appbadge"))
+        )
+          pop.classList.add("hidden");
+      });
 
       /* ====================== BOOT ====================== */
       renderAuthMode();
